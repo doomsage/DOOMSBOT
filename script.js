@@ -1,10 +1,15 @@
 const API_KEY = "AIzaSyC6sxlMsWWW49d69sOFjXGyY1OTItYvyG8";
 
-// Try modern Gemini models first; keep gemini-pro fallback for compatibility.
-const MODEL_ENDPOINTS = [
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent",
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const MODELS_URL = `${API_BASE}/models`;
+
+const PREFERRED_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash-latest",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro-latest",
+  "gemini-pro"
 ];
 
 const SYSTEM_PROMPT = `You are DOOMSBOT, an elite JEE mentor trained in Physics, Chemistry, and Mathematics.
@@ -53,6 +58,7 @@ const chatContainer = document.getElementById("chatContainer");
 const sendButton = document.getElementById("sendButton");
 
 const conversationHistory = [];
+let cachedModelNames = null;
 
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -129,10 +135,11 @@ async function fetchGeminiResponse(userMessage) {
   conversationHistory.push({ role: "user", parts: [{ text: userMessage }] });
 
   const requestBody = buildRequestBody();
-  let lastError = null;
+  const usableModels = await getUsableModels();
+  const errors = [];
 
-  for (const endpoint of MODEL_ENDPOINTS) {
-    const url = `${endpoint}?key=${API_KEY}`;
+  for (const modelName of usableModels) {
+    const url = `${API_BASE}/models/${modelName}:generateContent?key=${API_KEY}`;
 
     try {
       const response = await fetch(url, {
@@ -145,7 +152,8 @@ async function fetchGeminiResponse(userMessage) {
 
       if (!response.ok) {
         const message = data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`${message} (model: ${extractModelName(endpoint)})`);
+        errors.push(`${modelName}: ${message}`);
+        continue;
       }
 
       const answer =
@@ -155,21 +163,61 @@ async function fetchGeminiResponse(userMessage) {
       conversationHistory.push({ role: "model", parts: [{ text: answer }] });
       return answer;
     } catch (error) {
-      lastError = error;
+      errors.push(`${modelName}: ${error?.message || "Network error"}`);
     }
   }
 
-  // rollback last user message if all models fail, so context stays clean
   if (conversationHistory[conversationHistory.length - 1]?.role === "user") {
     conversationHistory.pop();
   }
 
-  throw lastError || new Error("Unable to connect to Gemini.");
+  throw new Error(errors.join(" | ") || "Unable to connect to Gemini.");
 }
 
-function extractModelName(endpoint) {
-  const match = endpoint.match(/models\/(.*):generateContent/);
-  return match?.[1] || "unknown";
+async function getUsableModels() {
+  if (cachedModelNames) return cachedModelNames;
+
+  try {
+    const response = await fetch(`${MODELS_URL}?key=${API_KEY}`);
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message = data?.error?.message || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
+
+    const models = Array.isArray(data?.models) ? data.models : [];
+    const supportsGenerate = models
+      .filter((model) => Array.isArray(model.supportedGenerationMethods))
+      .filter((model) => model.supportedGenerationMethods.includes("generateContent"))
+      .map((model) => model.name.replace("models/", ""));
+
+    cachedModelNames = buildModelPriorityList(supportsGenerate);
+    if (!cachedModelNames.length) throw new Error("No compatible models found for generateContent.");
+
+    return cachedModelNames;
+  } catch (error) {
+    // Fallback list when ListModels is blocked by policy/network.
+    cachedModelNames = [...PREFERRED_MODELS];
+    return cachedModelNames;
+  }
+}
+
+function buildModelPriorityList(availableModelNames) {
+  const availableSet = new Set(availableModelNames);
+  const ranked = [];
+
+  for (const preferred of PREFERRED_MODELS) {
+    if (availableSet.has(preferred)) ranked.push(preferred);
+  }
+
+  for (const modelName of availableModelNames) {
+    if (!ranked.includes(modelName) && modelName.includes("gemini")) {
+      ranked.push(modelName);
+    }
+  }
+
+  return ranked;
 }
 
 function formatErrorForUser(error) {
@@ -179,12 +227,16 @@ function formatErrorForUser(error) {
     return "API key is invalid. Please generate a valid Gemini API key and replace API_KEY in script.js.";
   }
 
-  if (rawMessage.includes("API_KEY_HTTP_REFERRER_BLOCKED") || rawMessage.includes("referer")) {
+  if (rawMessage.includes("API_KEY_HTTP_REFERRER_BLOCKED") || rawMessage.toLowerCase().includes("referer")) {
     return "This domain is blocked by API key restrictions. In Google AI Studio, allow this website domain in API key HTTP referrers.";
   }
 
-  if (rawMessage.includes("quota") || rawMessage.includes("429")) {
+  if (rawMessage.toLowerCase().includes("quota") || rawMessage.includes("429")) {
     return "Gemini quota limit reached. Please try again later or use a different API key/project.";
+  }
+
+  if (rawMessage.includes("not found for API version") || rawMessage.includes("supported methods")) {
+    return "Your API project doesn't support one or more Gemini models yet. I automatically try multiple models—please verify your project has an enabled Gemini model in Google AI Studio.";
   }
 
   return `Gemini request failed: ${rawMessage}`;
