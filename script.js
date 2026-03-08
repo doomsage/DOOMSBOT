@@ -131,7 +131,7 @@ async function fetchBotResponse(userMessage) {
     if (conversationHistory[conversationHistory.length - 1]?.role === 'user') {
       conversationHistory.pop();
     }
-    throw new Error(data?.error || `HTTP ${response.status}`);
+    throw new Error(data?.error || `HTTP_${response.status}`);
   }
 
   const answer = data?.candidates?.[0]?.content?.parts?.map((part) => part.text).join('\n') || 'No valid response received from the model.';
@@ -142,20 +142,28 @@ async function fetchBotResponse(userMessage) {
 function formatErrorForUser(error) {
   const message = error?.message || 'Unknown error.';
 
+  if (message.includes('HTTP_404') || message.includes('HTTP 404')) {
+    return 'Backend route /api/chat not found (404). App ko static hosting par nahi, Node server (server.js) ke saath run/deploy karo.';
+  }
+
+  if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+    return 'Backend tak connection nahi ho pa raha. Ensure server chal raha hai aur same domain par /api/chat available hai.';
+  }
+
   if (message.includes('Server missing GEMINI_API_KEY')) {
-    return 'Server setup issue: GEMINI_API_KEY is missing. Add it in server environment and restart backend.';
+    return 'Server setup issue: GEMINI_API_KEY missing hai. Server env me key set karke restart karo.';
   }
 
   if (message.includes('API key not valid')) {
-    return 'Server API key is invalid. Update GEMINI_API_KEY on server with a valid Gemini API key.';
+    return 'Server API key invalid hai. GEMINI_API_KEY ko valid Gemini key se update karo.';
   }
 
   if (message.includes('API_KEY_HTTP_REFERRER_BLOCKED') || message.toLowerCase().includes('referer')) {
-    return 'API key referrer restrictions are blocking this domain. Allow your domain in Google AI Studio key settings.';
+    return 'API key referrer restrictions is domain ko block kar rahi hain. Google AI Studio me apna domain allow karo.';
   }
 
   if (message.toLowerCase().includes('quota') || message.includes('429')) {
-    return 'Gemini quota reached. Please try again later.';
+    return 'Gemini quota reached. Kuch der baad try karo.';
   }
 
   return `Request failed: ${message}`;
