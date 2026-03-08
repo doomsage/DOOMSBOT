@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DOOMSBOT – JEE AI MENTOR</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>DOOMSBOT – JEE AI MENTOR</h1>
+        <p>Your elite Physics, Chemistry & Mathematics coach for JEE Main + Advanced.</p>
+      </header>
+
+      <section id="chatContainer" class="chat-container" aria-live="polite" aria-label="Chat messages">
+        <article class="message ai">
+          <div class="bubble">
+            Welcome to <strong>DoomsBot JEE Mentor</strong>. Ask me any JEE topic, chapter, or problem and I'll teach it like a top mentor.
+          </div>
+        </article>
+      </section>
+
+      <form id="chatForm" class="chat-input-area" autocomplete="off">
+        <label for="userInput" class="sr-only">Type your message</label>
+        <textarea
+          id="userInput"
+          name="userInput"
+          rows="1"
+          placeholder="Ask a JEE question..."
+          required
+        ></textarea>
+        <button type="submit" id="sendButton">Send</button>
+      </form>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
