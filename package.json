@@ -1,0 +1,10 @@
+{
+  "name": "doomsbot-jee-mentor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DOOMSBOT JEE AI Mentor with server-side Gemini proxy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
